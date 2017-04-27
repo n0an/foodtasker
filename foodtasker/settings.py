@@ -25,7 +25,7 @@ SECRET_KEY = '=)oxbt7kmf3u0jg%3=$p!$h74jq@swu%536eqe*)1&j$d3320*'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [fathomless-atoll-71215.herokuapp.com]
 
 
 # Application definition
