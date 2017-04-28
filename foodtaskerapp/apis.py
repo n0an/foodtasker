@@ -131,7 +131,7 @@ def customer_driver_location(request):
     customer = access_token.user.customer
 
     # Get driver's location related to this customer's current order.
-    current_order = Order.objects.filter(customer = customer, status = Order.DELIVERED).last()
+    current_order = Order.objects.filter(customer = customer, status = Order.ONTHEWAY).last()
     location = current_order.driver.location
 
     return JsonResponse({"location": location})
