@@ -7,8 +7,14 @@ from django.views.decorators.csrf import csrf_exempt
 from oauth2_provider.models import AccessToken
 
 from foodtaskerapp.models import Restaurant, Meal, Order, OrderDetails, Driver
-from foodtaskerapp.serializers import RestaurantSerializer, MealSerializer, OrderSerializer
+from foodtaskerapp.serializers import RestaurantSerializer, \
+    MealSerializer, \
+    OrderSerializer
 
+import stripe
+from foodtasker.settings import STRIPE_API_KEY
+
+stripe.api_key = STRIPE_API_KEY
 
 ##############
 # CUSTOMERS
@@ -55,6 +61,9 @@ def customer_add_order(request):
         # Get profile
         customer = access_token.user.customer
 
+        # Get Stripe token
+        stripe_token = request.POST["stripe_token"]
+
         # Check whether customer has any order that is not delivered
         if Order.objects.filter(customer = customer).exclude(status = Order.DELIVERED):
             return JsonResponse({"status": "failed", "error": "Your last order must be completed."})
@@ -71,25 +80,39 @@ def customer_add_order(request):
             order_total += Meal.objects.get(id = meal["meal_id"]).price * meal["quantity"]
 
         if len(order_details) > 0:
-            # Step 1 - Create an Order
-            order = Order.objects.create(
-                customer = customer,
-                restaurant_id = request.POST["restaurant_id"],
-                total = order_total,
-                status = Order.COOKING,
-                address = request.POST["address"]
+
+            # Step 1: Create a charge: this will charge customer's card
+            charge = stripe.Charge.create(
+                amount = order_total * 100, # Amount in cents
+                currency = "usd",
+                source = stripe_token,
+                description = "FoodTasker Order"
             )
 
-            # Step 2 - Create Order details
-            for meal in order_details:
-                OrderDetails.objects.create(
-                    order = order,
-                    meal_id = meal["meal_id"],
-                    quantity = meal["quantity"],
-                    sub_total = Meal.objects.get(id = meal["meal_id"]).price * meal["quantity"]
+            if charge.status != "failed":
+                # Step 2 - Create an Order
+                order = Order.objects.create(
+                    customer = customer,
+                    restaurant_id = request.POST["restaurant_id"],
+                    total = order_total,
+                    status = Order.COOKING,
+                    address = request.POST["address"]
                 )
 
-            return JsonResponse({"status": "success"})
+                # Step 3 - Create Order details
+                for meal in order_details:
+                    OrderDetails.objects.create(
+                        order = order,
+                        meal_id = meal["meal_id"],
+                        quantity = meal["quantity"],
+                        sub_total = Meal.objects.get(id = meal["meal_id"]).price * meal["quantity"]
+                    )
+
+                return JsonResponse({"status": "success"})
+            else:
+                return JsonResponse({"status": "failed", "error": "Failed connect to Stripe."})
+
+
 
 
 def customer_get_latest_order(request):
